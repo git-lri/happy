@@ -80,13 +80,13 @@ Here is our mid-section datatype
 >        = showString "productions = "     . shows p
 >        . showString "\ntoken_specs = "   . shows t
 >        . showString "\nterminals = "     . shows ts
->        . showString "\nnonterminals = "  . shows nts
+>        . showString "\nnon_terminals = " . shows nts
 >        . showString "\nstarts = "        . shows starts
 >        . showString "\ntypes = "         . shows tys
 >        . showString "\ntoken_names = "   . shows e
 >        . showString "\nfirst_nonterm = " . shows fnt
 >        . showString "\nfirst_term = "    . shows ft
->        . showString "\neof = "           . shows eof
+>        . showString "\neof_term = "      . shows eof
 >        . showString "\n"
 
 #endif
