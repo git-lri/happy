@@ -67,6 +67,8 @@ Here is our mid-section datatype
 > instance Show Grammar where
 >       showsPrec _ (Grammar
 >               { productions           = p
+>               -- lookupProdNo
+>               -- lookupProdsOfName
 >               , token_specs           = t
 >               , terminals             = ts
 >               , non_terminals         = nts
@@ -76,6 +78,16 @@ Here is our mid-section datatype
 >               , first_nonterm         = fnt
 >               , first_term            = ft
 >               , eof_term              = eof
+>               , priorities            = priorities
+>               , token_type            = token_type
+>               , imported_identity     = imported_identity
+>               , monad                 = monad
+>               , expect                = expect
+>               , attributes            = attributes
+>               , attributetype         = attributetype
+>               , lexer                 = lexer
+>               , error_handler         = error_handler
+>               -- error_sig
 >               })
 >        = showString "productions = "     . shows p
 >        . showString "\ntoken_specs = "   . shows t
@@ -87,6 +99,15 @@ Here is our mid-section datatype
 >        . showString "\nfirst_nonterm = " . shows fnt
 >        . showString "\nfirst_term = "    . shows ft
 >        . showString "\neof_term = "      . shows eof
+>        . showString "\npriorities = "    . shows priorities
+>        . showString "\ntoken_type = "    . shows token_type
+>        . showString "\nimported_identity = " . shows imported_identity
+>        . showString "\nmonad = "         . shows monad
+>        . showString "\nexpect = "        . shows expect
+>        . showString "\nattributes = "    . shows attributes
+>        . showString "\nattributetype = " . shows attributetype
+>        . showString "\nlexer = "         . shows lexer
+>        . showString "\nerror_handler = " . shows error_handler
 >        . showString "\n"
 
 #endif
