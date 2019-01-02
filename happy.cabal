@@ -148,8 +148,10 @@ executable happy
   build-depends: base < 5,
                  array,
                  containers >= 0.4.2,
-                 mtl >= 2.2.1
+                 mtl >= 2.2.1,
                      -- mtl-2.2.1 added Control.Monad.Except
+                 haskell-src-exts == 1.20.1,
+                 Unique
 
   extensions: CPP, MagicHash, FlexibleContexts
   ghc-options: -Wall
@@ -166,6 +168,7 @@ executable happy
         Parser
         ProduceCode
         ProduceGLRCode
+        ProduceSMLCode
         NameSet
         Target
         AttrGrammar

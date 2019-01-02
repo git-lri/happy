@@ -4,7 +4,7 @@ The code generator.
 (c) 1993-2001 Andy Gill, Simon Marlow
 -----------------------------------------------------------------------------
 
-> module ProduceCode (produceParser) where
+> module ProduceCode (mkHappyVar, produceParser) where
 
 > import Paths_happy            ( version )
 > import Data.Version           ( showVersion )
