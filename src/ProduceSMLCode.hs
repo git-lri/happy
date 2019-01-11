@@ -13,6 +13,7 @@ import Data.Array.MArray
 import Data.Array.IArray
 import Data.Char (ord)
 import Data.Function
+import qualified Data.Generics as G
 import Data.List              ( groupBy, intercalate )
 import qualified Data.List.Unique as U
 
@@ -54,16 +55,21 @@ produceParser (Grammar
               action goto top_options module_header module_trailer
               target coerce ghc strict
     = ( str "%%\n"
-      . str ("%name " ++ "StrictC"{- FIXME -} ++ "\n")
-      . str ("%arg (source) : " ++ "SourceFile.t"{- FIXME -} ++ "\n")
-      . str "%nodefault\n"
+      . str ("%name " ++ "StrictC"{- FIXME: not yet generic -} ++ "\n")
+      . str ("%arg (source) : " ++ "SourceFile.t"{- FIXME: not yet generic -} ++ "\n")
+      . str "%nodefault\n\n"
       . str "%nonterm "
       . interleave' "\n       | " (map (\i -> str (token_names' ! i ++ " of " ++ case nt_types ! i of Just s -> to_sml_ty s)) $ drop n_starts nonterms)
       . nl . nl
       . str "%term "
-      . interleave' "\n    | " (map (\i -> str (token_names' ! i)) terms)
+      . interleave' "\n    | " (let l = map (\i -> let n = token_names' ! i in (n, case lookup n [("ident", "ident"), ("tyident", "ident")] of Nothing -> Just "string"; x -> x)) terms in
+                                map (\(n, type_n) -> str (n ++ case type_n of Just s -> " of " ++ s ; Nothing -> ""))
+                                    (case l of (x, _) : xs -> (x, Nothing) : init xs ++ [(fst (last xs), Nothing)]))
       . nl . nl
       . str ("%eop " ++ token_names' ! eof_term)
+      . nl
+      . str ("%pos " ++ "SourcePos.t"{- FIXME: not yet generic -} ++ "\n")
+      . str "%%"
       . nl . nl
       . str "(* production *)\n"
       . interleave "\n\n"
@@ -77,7 +83,7 @@ produceParser (Grammar
                              if var' == [] then id
                              else
                                \e ->
-                                 e
+                                 G.everywhere (G.mkT replace_curry) e
                                  & S.Lambda () (map (\i -> S.PVar () (S.Ident () (PC.mkHappyVar i ""))) var')
                                  & S.Paren ()
                                  & \e -> foldl (\e i -> S.App () e (S.Var () (S.UnQual () (S.Ident () (token_names' ! (l !! (i - 1))))))) e var')
@@ -96,7 +102,7 @@ produceParser (Grammar
       case code of
         '%':'%':code1 -> to_sml code1 ++ "(* %% *)"
         '%':'^':code1 -> to_sml code1 ++ "(* %^ *)"
-        '%':code1     -> to_sml code1 ++ "(* % *)"
+        '%':code1     -> to_sml_exp (S.App () (S.Var () (S.UnQual () (S.Ident () "wrap_monad"))) . S.Paren () . f) code1
         _ -> to_sml code
     token_names' =
       fmap (\body0 -> 
@@ -114,6 +120,22 @@ produceParser (Grammar
     f_span = span (\x -> not (x >= 'a' && x <= 'z' || x >= 'A' && x <= 'Z'))
     conv = intercalate "_" . map (\x -> "x" ++ Numeric.showHex (ord x) "")
     conv_inter a b = if length a > 0 && length b > 0 then "_" else ""
+    replace_curry :: S.Exp () -> S.Exp ()
+    replace_curry e =
+      case e of
+        S.Case _ e0 l ->
+          S.Case
+            ()
+            e0
+            (map (\a -> case a of S.Alt _ (S.PApp _ (S.UnQual _ (S.Ident _ c)) l) rhs bind ->
+                                    if c `elem` ["CDecl"] then
+                                      S.Alt () (S.PApp () (S.UnQual () (S.Ident () (c ++ "0"))) [S.PTuple () S.Boxed l]) rhs bind
+                                    else a
+                                  _ -> a) l)
+        S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "CDecl"))) arg1) arg2@(S.List _ [S.Tuple _ _ _]) -> S.App () (S.App () (S.Con () (S.UnQual () (S.Ident () "CDecl_flat"))) arg1) arg2
+        S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "CDecl"))) arg1) (S.Paren _ (S.InfixApp _ arg2@(S.Tuple _ _ _) (S.QConOp _ (S.Special _ (S.Cons _))) arg3)) -> S.App () (S.App () (S.Con () (S.UnQual () (S.Ident () "CDecl"))) arg1) (S.Paren () (S.InfixApp () (S.Paren () (S.App () (S.Con () (S.UnQual () (S.Ident () "flat3"))) arg2)) (S.QConOp () (S.Special () (S.Cons ()))) arg3))
+        _ -> e
+    
 
 --------------------------------------------------------------------------------
 
