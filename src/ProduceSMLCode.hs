@@ -135,7 +135,7 @@ _Exp e = case e of
   S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ "$"))) e2 -> _Exp (S.App () e1 (S.Paren () e2))
   S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ "$!"))) e2 -> _Exp (S.App () e1 (S.Paren () e2))
   S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ "."))) e2 -> _Exp e1 ++ " o " ++ _Exp e2
-  S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ "++"))) e2 -> _Exp e1 ++ " ^ " ++ _Exp e2
+  S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ "++"))) e2 -> _Exp e1 ++ " @ " ++ _Exp e2
   S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ ">>"))) e2 -> _Exp e1 ++ " >> " ++ _Exp e2
   S.InfixApp _ e1 (S.QVarOp _ q@(S.UnQual _ (S.Ident _ _))) e2 -> _Exp (S.App () (S.App () (S.Var () q) e1) e2)
   S.InfixApp _ e1 (S.QConOp _ (S.Special _ (S.Cons _))) e2 -> _Exp e1 ++ " :: " ++ _Exp e2
