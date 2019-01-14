@@ -62,7 +62,7 @@ produceParser (Grammar
       . interleave' "\n       | " (map (\i -> str (token_names' ! i ++ " of " ++ case nt_types ! i of Just s -> to_sml_ty s)) $ drop n_starts nonterms)
       . nl . nl
       . str "%term "
-      . interleave' "\n    | " (let l = map (\i -> let n = token_names' ! i in (n, case lookup n [("ident", "ident"), ("tyident", "ident")] of Nothing -> Just "string"; x -> x)) terms in
+      . interleave' "\n    | " (let l = map (\i -> let n = token_names' ! i in (n, case lookup n [("ident", "ident"), ("tyident", "ident"), ("clangcversion", "ClangCVersion")] of Nothing -> Just "string"; x -> x)) terms in
                                 map (\(n, type_n) -> str (n ++ case type_n of Just s -> " of " ++ s ; Nothing -> ""))
                                     (case l of (x, _) : xs -> (x, Nothing) : init xs ++ [(fst (last xs), Nothing)]))
       . nl . nl
@@ -123,6 +123,8 @@ produceParser (Grammar
     replace_curry :: S.Exp () -> S.Exp ()
     replace_curry e =
       case e of
+        S.Case _ (S.Var _ (S.UnQual _ i@(S.Ident _ _))) [S.Alt _ (S.PApp _ (S.UnQual _ (S.Ident _ c)) [S.PWildCard _, v]) (S.UnGuardedRhs _ f) Nothing] | c `elem` ["CTokILit", "CTokCLit", "CTokFLit", "CTokSLit"] ->
+          S.App () (S.App () (S.Con () (S.UnQual () (S.Ident () c))) (S.Var () (S.UnQual () i))) (S.Paren () (S.Lambda () [v] f))
         S.Case _ e0 l ->
           S.Case
             ()
@@ -130,12 +132,16 @@ produceParser (Grammar
             (map (\a -> case a of S.Alt _ (S.PApp _ (S.UnQual _ (S.Ident _ c)) l) rhs bind ->
                                     if c `elem` ["CDecl"] then
                                       S.Alt () (S.PApp () (S.UnQual () (S.Ident () (c ++ "0"))) [S.PTuple () S.Boxed l]) rhs bind
-                                    else a
+                                    else
+                                      S.Alt () (S.PApp () (S.UnQual () (S.Ident () (case lookup c [("Nothing", "None"), ("Just", "Some")] of Just x -> x ; Nothing -> c))) l) rhs bind
+                                  S.Alt _ (S.PTuple _ S.Boxed [S.PApp _ (S.UnQual _ (S.Ident _ "Just")) l, pat]) rhs bind ->
+                                    S.Alt () (S.PTuple () S.Boxed [S.PApp () (S.UnQual () (S.Ident () "Some")) (case l of [S.PParen _ (S.PApp _ (S.UnQual _ (S.Ident _ c0)) l0)] -> if c0 `elem` ["CDeclr"] then [S.PParen () (S.PApp () (S.UnQual () (S.Ident () (c0 ++ "0"))) [S.PTuple () S.Boxed l0])] else l ; _ -> l), pat]) rhs bind
+                                  S.Alt _ (S.PTuple _ S.Boxed [S.PApp _ (S.UnQual _ (S.Ident _ "Nothing")) l, pat]) rhs bind ->
+                                    S.Alt () (S.PTuple () S.Boxed [S.PApp () (S.UnQual () (S.Ident () "None")) l, pat]) rhs bind
                                   _ -> a) l)
         S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "CDecl"))) arg1) arg2@(S.List _ [S.Tuple _ _ _]) -> S.App () (S.App () (S.Con () (S.UnQual () (S.Ident () "CDecl_flat"))) arg1) arg2
         S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "CDecl"))) arg1) (S.Paren _ (S.InfixApp _ arg2@(S.Tuple _ _ _) (S.QConOp _ (S.Special _ (S.Cons _))) arg3)) -> S.App () (S.App () (S.Con () (S.UnQual () (S.Ident () "CDecl"))) arg1) (S.Paren () (S.InfixApp () (S.Paren () (S.App () (S.Con () (S.UnQual () (S.Ident () "flat3"))) arg2)) (S.QConOp () (S.Special () (S.Cons ()))) arg3))
         _ -> e
-    
 
 --------------------------------------------------------------------------------
 
@@ -159,7 +165,7 @@ _Exp e = case e of
   S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ "."))) e2 -> _Exp e1 ++ " o " ++ _Exp e2
   S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ "++"))) e2 -> _Exp e1 ++ " @ " ++ _Exp e2
   S.InfixApp _ e1 (S.QVarOp _ (S.UnQual _ (S.Symbol _ ">>"))) e2 -> _Exp e1 ++ " >> " ++ _Exp e2
-  S.InfixApp _ e1 (S.QVarOp _ q@(S.UnQual _ (S.Ident _ _))) e2 -> _Exp (S.App () (S.App () (S.Var () q) e1) e2)
+  S.InfixApp _ e1 (S.QVarOp _ q@(S.UnQual _ (S.Ident _ _))) e2 -> _Exp (S.App () (S.App () (S.Var () q) (S.Paren () e1)) (S.Paren () e2))
   S.InfixApp _ e1 (S.QConOp _ (S.Special _ (S.Cons _))) e2 -> _Exp e1 ++ " :: " ++ _Exp e2
   S.App _ e1 e2 -> _Exp e1 ++ " " ++ _Exp e2
   S.Lambda _ p e | all (\x -> case x of S.PVar _ _ -> True ; _ -> False) p -> concatMap (\x -> case x of S.PVar _ n -> "fn " ++ _Name n ++ " => ") p ++ _Exp e
