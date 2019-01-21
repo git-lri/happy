@@ -11,10 +11,10 @@ import Data.Array.ST          ( STUArray )
 import Data.Array.Unboxed     ( UArray )
 import Data.Array.MArray
 import Data.Array.IArray
-import Data.Char (ord)
+import Data.Char (ord, toLower)
 import Data.Function
 import qualified Data.Generics as G
-import Data.List              ( groupBy, intercalate )
+import Data.List              ( groupBy, intercalate, partition )
 import qualified Data.List.Unique as U
 
 import qualified Language.Haskell.Exts.Parser as P
@@ -66,6 +66,35 @@ produceParser (Grammar
                                 map (\(n, type_n) -> str (n ++ case type_n of Just s -> " of " ++ s ; Nothing -> ""))
                                     (case l of (x, _) : xs -> (x, Nothing) : init xs ++ [(fst (last xs), Nothing)]))
       . nl . nl
+      . str "(* fun token_of_string error ty_string ty_ident ty_ClangCVersion a1 a2 = fn\n    "
+      . interleave' "\n    "
+          (let l = map (\i -> let n = token_names' ! i in ((n, token_names0 ! i), case lookup n [("ident", "ident"), ("tyident", "ident"), ("clangcversion", "ClangCVersion")] of Nothing -> Just "string"; x -> x)) terms in
+           init (tail l)
+           & map (\x@((n, n0), type_n) ->
+                   ( x
+                   , if n == n0
+                     then Nothing
+                     else
+                       case n0 of
+                         ['\'',c,'\''] -> Just ("\""++ [c] ++ "\"")
+                         '"':s -> case reverse s of
+                                    '"':s' ->
+                                      if any (\c -> c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') s'
+                                      then Nothing else Just n0
+                                    _ -> Nothing
+                         _ -> Nothing))
+           & partition (\x -> snd x == Nothing)
+           & (let f (((n, n0), type_n), x) =
+                        let s_end = n ++ case type_n of Just s -> " (ty_" ++ s ++ ", a1, a2)"
+                                                        Nothing -> " (a1, a2)" in
+                        case x
+                        of
+                          Nothing -> "val " ++ escape_sml (concatMap (\c -> let c' = toLower c in if c' >= 'a' && c' <= 'z' || c' >= '0' && c' <= '9' then [c'] else []) n0) ++ " = " ++ s_end ++ ""
+                          Just n0 -> "| " ++ n0 ++ " => " ++ s_end in
+              \(l2, l1) -> map f l1 ++ ["| x => let "] ++ map f l2 ++ ["in case x of", "(* | _ => error end *)"])
+           & map str)
+      . str "\n*)"
+      . nl . nl
       . str ("%eop " ++ token_names' ! eof_term)
       . nl
       . str ("%pos " ++ "SourcePos.t"{- FIXME: not yet generic -} ++ "\n")
@@ -112,11 +141,13 @@ produceParser (Grammar
                                                      _ -> body0
                  (r, body2) = f_span $ reverse body1
                  body3 = concat [conv l, conv_inter l body2, reverse body2, conv_inter body2 r, conv (reverse r)] in
+             escape_sml body3)
+           token_names0
+    escape_sml body3 =
              if body3 `elem` ["case", "do", "else", "for", "if", "struct", "while"] then
                body3 ++ "0"
              else
-               body3)
-           token_names0
+               body3
     f_span = span (\x -> not (x >= 'a' && x <= 'z' || x >= 'A' && x <= 'Z'))
     conv = intercalate "_" . map (\x -> "x" ++ Numeric.showHex (ord x) "")
     conv_inter a b = if length a > 0 && length b > 0 then "_" else ""
