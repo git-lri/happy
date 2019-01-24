@@ -59,6 +59,7 @@ produceParser (Grammar
       . str "%%\n"
       . str "%pure\n"
       . str ("%name " ++ "StrictC"{- FIXME: not yet generic -} ++ "\n")
+      . str "%arg (_) : Header.arg\n"
       . str "%nodefault\n\n"
       . str "%nonterm "
       . interleave' "\n       | " (map (\i -> str (token_names' ! i ++ " of " ++ case nt_types ! i of Just s -> to_sml_ty s)) $ drop n_starts nonterms)
