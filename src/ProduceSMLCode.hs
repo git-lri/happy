@@ -54,9 +54,11 @@ produceParser (Grammar
               })
               action goto top_options module_header module_trailer
               target coerce ghc strict
-    = ( str "%%\n"
+    = ( str "open Hsk_c_parser"{- FIXME: not yet generic -}
+      . nl . nl
+      . str "%%\n"
+      . str "%pure\n"
       . str ("%name " ++ "StrictC"{- FIXME: not yet generic -} ++ "\n")
-      . str ("%arg (source) : " ++ "SourceFile.t"{- FIXME: not yet generic -} ++ "\n")
       . str "%nodefault\n\n"
       . str "%nonterm "
       . interleave' "\n       | " (map (\i -> str (token_names' ! i ++ " of " ++ case nt_types ! i of Just s -> to_sml_ty s)) $ drop n_starts nonterms)
@@ -129,9 +131,9 @@ produceParser (Grammar
     show_code f code =
       let to_sml = to_sml_exp f in
       case code of
-        '%':'%':code1 -> to_sml code1 ++ "(* %% *)"
-        '%':'^':code1 -> to_sml code1 ++ "(* %^ *)"
-        '%':code1     -> to_sml_exp (S.App () (S.Var () (S.UnQual () (S.Ident () "wrap_monad"))) . S.Paren () . f) code1
+        '%':'%':code1 -> "(*%%*)" ++ to_sml code1
+        '%':'^':code1 -> "(*%^*)" ++ to_sml code1
+        '%':code1     -> "(*%*)" ++ to_sml code1
         _ -> to_sml code
     token_names' =
       fmap (\body0 -> 
@@ -144,7 +146,7 @@ produceParser (Grammar
              escape_sml body3)
            token_names0
     escape_sml body3 =
-             if body3 `elem` ["case", "do", "else", "for", "if", "struct", "while"] then
+             if body3 `elem` ["case", "do", "else", "for", "if", "struct", "while", "return"] then
                body3 ++ "0"
              else
                body3
