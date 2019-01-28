@@ -65,13 +65,13 @@ produceParser (Grammar
       . interleave' "\n       | " (map (\i -> str (token_names' ! i ++ " of " ++ case nt_types ! i of Just s -> to_sml_ty s)) $ drop n_starts nonterms)
       . nl . nl
       . str "%term "
-      . interleave' "\n    | " (let l = map (\i -> let n = token_names' ! i in (n, case lookup n [("ident", "ident"), ("tyident", "ident"), ("clangcversion", "ClangCVersion")] of Nothing -> Just "string"; x -> x)) terms in
+      . interleave' "\n    | " (let l = map (\i -> let n = token_names' ! i in (n, ty_term n)) terms in
                                 map (\(n, type_n) -> str (n ++ case type_n of Just s -> " of " ++ s ; Nothing -> ""))
                                     (case l of (x, _) : xs -> (x, Nothing) : init xs ++ [(fst (last xs), Nothing)]))
       . nl . nl
-      . str "(* fun token_of_string error ty_string ty_ident ty_ClangCVersion a1 a2 = fn\n    "
+      . str ("(* fun token_of_string error " ++ intercalate " " (map mk_ty $ U.sortUniq ("string" : map snd ty_term0)) ++ " a1 a2 = fn\n    ")
       . interleave' "\n    "
-          (let l = map (\i -> let n = token_names' ! i in ((n, token_names0 ! i), case lookup n [("ident", "ident"), ("tyident", "ident"), ("clangcversion", "ClangCVersion")] of Nothing -> Just "string"; x -> x)) terms in
+          (let l = map (\i -> let n = token_names' ! i in ((n, token_names0 ! i), ty_term n)) terms in
            init (tail l)
            & map (\x@((n, n0), type_n) ->
                    ( x
@@ -88,7 +88,7 @@ produceParser (Grammar
                          _ -> Nothing))
            & partition (\x -> snd x == Nothing)
            & (let f (((n, n0), type_n), x) =
-                        let s_end = n ++ case type_n of Just s -> " (ty_" ++ s ++ ", a1, a2)"
+                        let s_end = n ++ case type_n of Just s -> " (" ++ mk_ty s ++ ", a1, a2)"
                                                         Nothing -> " (a1, a2)" in
                         case x
                         of
@@ -128,6 +128,9 @@ produceParser (Grammar
       . nl
       ) ""
   where
+    ty_term0 = [("cchar", "cChar"), ("cint", "cInteger"), ("cfloat", "cFloat"), ("cstr", "cString"), ("ident", "ident"), ("tyident", "ident"), ("clangcversion", "ClangCVersion")]
+    ty_term n = case lookup n ty_term0 of Nothing -> Just "string"; x -> x
+    mk_ty s = "ty_" ++ s
     n_starts = length starts'
     show_code f code =
       let to_sml = to_sml_exp f in
