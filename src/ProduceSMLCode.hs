@@ -100,7 +100,7 @@ produceParser (Grammar
       . nl . nl
       . str ("%eop " ++ token_names' ! eof_term)
       . nl
-      . str ("%pos " ++ "SourcePos.t"{- FIXME: not yet generic -} ++ "\n")
+      . str ("%pos " ++ "Position.T" ++ "\n")
       . str "%%"
       . nl . nl
       . str "(* production *)\n"
