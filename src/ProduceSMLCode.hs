@@ -16,6 +16,7 @@ import Data.Function
 import qualified Data.Generics as G
 import Data.List              ( groupBy, intercalate, partition )
 import qualified Data.List.Unique as U
+import qualified Data.Map.Strict as Map
 
 import qualified Language.Haskell.Exts.Parser as P
 import qualified Language.Haskell.Exts.Syntax as S
@@ -118,7 +119,13 @@ produceParser (Grammar
                                  G.everywhere (G.mkT replace_curry) e
                                  & S.Lambda () (map (\i -> S.PVar () (S.Ident () (PC.mkHappyVar i ""))) var')
                                  & S.Paren ()
-                                 & \e -> foldl (\e i -> S.App () e (S.Var () (S.UnQual () (S.Ident () (token_names' ! (l !! (i - 1))))))) e var')
+                                 & \e -> foldl (\(e, l_name) i ->
+                                                 let name = token_names' ! (l !! (i - 1))
+                                                     name' = case Map.lookup name l_name of Nothing -> 1 ; Just x -> x + 1 in
+                                                 (S.App () e (S.Var () (S.UnQual () (S.Ident () (name ++ show name')))), Map.insert name name' l_name))
+                                               (e, Map.empty)
+                                               var'
+                                 & fst)
                             code
                        ++ ")"
                      name = token_names' ! n in
