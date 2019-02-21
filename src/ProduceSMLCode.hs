@@ -108,6 +108,13 @@ produceParser (Grammar
       . interleave "\n\n"
           (map (\(x@(n, _, _, _):xs) ->
                  let f n' (_, l, (code, var), No) =
+                       let l' = let (l'', _) = foldl (\(l', l_name) i ->
+                                                       let name = token_names' ! i
+                                                           name' = case Map.lookup name l_name of Nothing -> 1 ; Just x -> x + 1 in
+                                                       ((name ++ show name') : l', Map.insert name name' l_name))
+                                                     ([], Map.empty)
+                                                     l in
+                                reverse l'' in
                        n'
                        ++ (intercalate " " $ map (\i -> token_names' ! i) l)
                        ++ " ("
@@ -119,13 +126,9 @@ produceParser (Grammar
                                  G.everywhere (G.mkT replace_curry) e
                                  & S.Lambda () (map (\i -> S.PVar () (S.Ident () (PC.mkHappyVar i ""))) var')
                                  & S.Paren ()
-                                 & \e -> foldl (\(e, l_name) i ->
-                                                 let name = token_names' ! (l !! (i - 1))
-                                                     name' = case Map.lookup name l_name of Nothing -> 1 ; Just x -> x + 1 in
-                                                 (S.App () e (S.Var () (S.UnQual () (S.Ident () (name ++ show name')))), Map.insert name name' l_name))
-                                               (e, Map.empty)
-                                               var'
-                                 & fst)
+                                 & \e -> foldl (\e i -> S.App () e (S.Var () (S.UnQual () (S.Ident () (l' !! (i - 1))))))
+                                               e
+                                               var')
                             code
                        ++ ")"
                      name = token_names' ! n in
