@@ -119,16 +119,17 @@ produceParser (Grammar
                        ++ (intercalate " " $ map (\i -> token_names' ! i) l)
                        ++ " ("
                        ++ show_code
-                            (let var' = U.sortUniq var in
-                             if var' == [] then id
-                             else
-                               \e ->
-                                 G.everywhere (G.mkT replace_curry) e
-                                 & S.Lambda () (map (\i -> S.PVar () (S.Ident () (PC.mkHappyVar i ""))) var')
-                                 & S.Paren ()
-                                 & \e -> foldl (\e i -> S.App () e (S.Var () (S.UnQual () (S.Ident () (l' !! (i - 1))))))
-                                               e
-                                               var')
+                            (\e -> G.everywhere (G.mkT replace_curry) e
+                              & let var' = U.sortUniq var in
+                                if var' == [] then id
+                                else
+                                  \e ->
+                                    e
+                                    & S.Lambda () (map (\i -> S.PVar () (S.Ident () (PC.mkHappyVar i ""))) var')
+                                    & S.Paren ()
+                                    & \e -> foldl (\e i -> S.App () e (S.Var () (S.UnQual () (S.Ident () (l' !! (i - 1))))))
+                                                  e
+                                                  var')
                             code
                        ++ ")"
                      name = token_names' ! n in
