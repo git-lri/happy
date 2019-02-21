@@ -11,7 +11,7 @@ import Data.Array.ST          ( STUArray )
 import Data.Array.Unboxed     ( UArray )
 import Data.Array.MArray
 import Data.Array.IArray
-import Data.Char (ord, toLower)
+import Data.Char (ord, toLower, digitToInt)
 import Data.Function
 import qualified Data.Generics as G
 import Data.List              ( groupBy, intercalate, partition )
@@ -119,7 +119,8 @@ produceParser (Grammar
                        ++ (intercalate " " $ map (\i -> token_names' ! i) l)
                        ++ " ("
                        ++ show_code
-                            (\e -> G.everywhere (G.mkT replace_curry) e
+                            (\e ->
+                              G.everywhere (G.mkT replace_curry) e
                               & let var' = U.sortUniq var in
                                 if var' == [] then id
                                 else
@@ -129,7 +130,20 @@ produceParser (Grammar
                                     & S.Paren ()
                                     & \e -> foldl (\e i -> S.App () e (S.Var () (S.UnQual () (S.Ident () (l' !! (i - 1))))))
                                                   e
-                                                  var')
+                                                  var'
+                              & let l_class_fun = U.sortUniq (G.everything (++) (G.mkQ [] find_class_fun) e) in
+                                case l_class_fun of
+                                [] -> id
+                                _ ->
+                                  \e ->
+                                    e
+                                    & S.Lambda () (map (\(n, _, _) -> S.PVar () (S.Ident () n)) l_class_fun)
+                                    & S.Paren ()
+                                    & \e -> foldl (\e (n, i, (pat, n')) ->
+                                                    let name = l' !! (i - 1) in
+                                                    S.App () e ((S.Paren () (S.Lambda () pat (S.App () n' (S.Lit () (S.Int () (fromIntegral (i - 1)) (show (i - 1)))))))))
+                                                  e
+                                                  l_class_fun)
                             code
                        ++ ")"
                      name = token_names' ! n in
@@ -144,12 +158,13 @@ produceParser (Grammar
     mk_ty s = "ty_" ++ s
     n_starts = length starts'
     show_code f code =
-      let to_sml = to_sml_exp f in
+      let to_sml = fst . to_sml_exp f in
       case code of
         '%':'%':code1 -> "(*%%*)" ++ to_sml code1
         '%':'^':code1 -> "(*%^*)" ++ to_sml code1
         '%':code1     -> "(*%*)" ++ to_sml code1
-        _ -> to_sml code
+        _ -> case to_sml_exp f code of (code, True) -> "(*%*)" ++ code
+                                       (code, False) -> code
     token_names' =
       fmap (\body0 -> 
              let (l, body1) = f_span $ case body0 of ['\'',c,'\''] -> [c]
@@ -189,7 +204,36 @@ produceParser (Grammar
                                   _ -> a) l)
         S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "CDecl"))) arg1) arg2@(S.List _ [S.Tuple _ _ _]) -> S.App () (S.App () (S.Con () (S.UnQual () (S.Ident () "CDecl_flat"))) arg1) arg2
         S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "CDecl"))) arg1) (S.Paren _ (S.InfixApp _ arg2@(S.Tuple _ _ _) (S.QConOp _ (S.Special _ (S.Cons _))) arg3)) -> S.App () (S.App () (S.Con () (S.UnQual () (S.Ident () "CDecl"))) arg1) (S.Paren () (S.InfixApp () (S.Paren () (S.App () (S.Con () (S.UnQual () (S.Ident () "flat3"))) arg2)) (S.QConOp () (S.Special () (S.Cons ()))) arg3))
+        S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "withNodeInfo"))) (S.Var _ (S.UnQual _ (S.Ident _ "d"))) -> S.App () (S.Var () (S.UnQual () (S.Ident () "withNodeInfo_CExtDecl"))) (S.Var () (S.UnQual () (S.Ident () "d")))
+        S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "withNodeInfo"))) (S.Var _ (S.UnQual _ (S.Ident _ "es"))) -> S.App () (S.Var () (S.UnQual () (S.Ident () "withNodeInfo_CExpr"))) (S.Var () (S.UnQual () (S.Ident () "es")))
         _ -> e
+
+    find_class_fun0 name n =
+      [(name, digitToInt n, ([S.PWildCard ()], S.Var () (S.UnQual () (S.Ident () name))))]
+    find_class_fun1 name n =
+      [( name
+       , digitToInt n
+       , let var_x = "x" in
+         ( [S.PVar () (S.Ident () var_x), S.PWildCard ()]
+         , S.App () (S.Con () (S.UnQual () (S.Ident () name))) (S.Var () (S.UnQual () (S.Ident () var_x)))))]
+    find_class_fun e = case e of
+      S.App () (S.Var () (S.UnQual () (S.Ident () "withNodeInfo"))) (S.Var () (S.UnQual () (S.Ident () var))) ->
+        case var of
+          'h' : 'a' : 'p' : 'p' : 'y' : '_' : 'v' : 'a' : 'r' : '_' : n : [] -> find_class_fun0 "withNodeInfo" n
+          _ -> []
+      S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "withAttribute"))) (S.Var _ (S.UnQual _ (S.Ident _ var))) ->
+        case var of
+          'h' : 'a' : 'p' : 'p' : 'y' : '_' : 'v' : 'a' : 'r' : '_' : n : [] -> find_class_fun0 "withAttribute" n
+          _ -> []
+      S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "withAttributePF"))) (S.Var _ (S.UnQual _ (S.Ident _ var))) ->
+        case var of
+          'h' : 'a' : 'p' : 'p' : 'y' : '_' : 'v' : 'a' : 'r' : '_' : n : [] -> find_class_fun0 "withAttributePF" n
+          _ -> []
+      S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "L"))) (S.Con _ (S.UnQual _ (S.Ident _ _)))) (S.Paren _ (S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "posOf"))) (S.Var _ (S.UnQual _ (S.Ident _ var))))) ->
+        case var of
+          'h' : 'a' : 'p' : 'p' : 'y' : '_' : 'v' : 'a' : 'r' : '_' : n : [] -> find_class_fun1 "L" n
+          _ -> []
+      _ -> []
 
 --------------------------------------------------------------------------------
 
@@ -216,7 +260,7 @@ _Exp e = case e of
   S.InfixApp _ e1 (S.QVarOp _ q@(S.UnQual _ (S.Ident _ _))) e2 -> _Exp (S.App () (S.App () (S.Var () q) (S.Paren () e1)) (S.Paren () e2))
   S.InfixApp _ e1 (S.QConOp _ (S.Special _ (S.Cons _))) e2 -> _Exp e1 ++ " :: " ++ _Exp e2
   S.App _ e1 e2 -> _Exp e1 ++ " " ++ _Exp e2
-  S.Lambda _ p e | all (\x -> case x of S.PVar _ _ -> True ; _ -> False) p -> concatMap (\x -> case x of S.PVar _ n -> "fn " ++ _Name n ++ " => ") p ++ _Exp e
+  S.Lambda _ p e | all (\x -> case x of S.PVar _ _ -> True ; S.PWildCard _ -> True ; _ -> False) p -> concatMap (\x -> "fn " ++ (case x of S.PVar _ n -> _Name n ; S.PWildCard _ -> "_") ++ " => ") p ++ _Exp e
   S.Let _ (S.BDecls _ l) e -> "let " ++ (intercalate "; " $ map (\x -> case x of S.PatBind _ (S.PVar _ (S.Ident _ s)) (S.UnGuardedRhs _ e) Nothing -> "val " ++ s ++ " = " ++ _Exp e) l) ++ " in " ++ _Exp e ++ " end"
   S.Case _ e l ->
     "case " ++ _Exp e ++ " of "
@@ -253,4 +297,10 @@ _Name n = case n of
   -- _ -> show n
 
 to_sml_ty s = case P.parseType s of P.ParseOk t -> _Type t
-to_sml_exp f s = case P.parseExp s of P.ParseOk t -> _Exp (f $ fmap (\_ -> ()) t)
+to_sml_exp f s = case P.parseExp s of
+  P.ParseOk t ->
+    let e = fmap (\_ -> ()) t in
+    ( _Exp (f e)
+    , case e of
+        S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "L"))) (S.Con _ (S.UnQual _ (S.Ident _ _)))) (S.Paren _ (S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "posOf"))) (S.Var _ (S.UnQual _ (S.Ident _ _))))) -> True
+        _ -> False)
