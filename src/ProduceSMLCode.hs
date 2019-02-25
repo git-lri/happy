@@ -55,7 +55,7 @@ produceParser (Grammar
               })
               action goto top_options module_header module_trailer
               target coerce ghc strict
-    = ( str "open Hsk_c_parser"{- FIXME: not yet generic -}
+    = ( str "open C_ast_simple open Hsk_c_parser"{- FIXME: not yet generic -}
       . nl . nl
       . str "%%\n"
       . str "%pure\n"
