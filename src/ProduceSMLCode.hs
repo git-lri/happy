@@ -55,7 +55,7 @@ produceParser (Grammar
               })
               action goto top_options module_header module_trailer
               target coerce ghc strict
-    = ( str "open C_Ast open C_Grammar_Rule_Lib"{- FIXME: not yet generic -}
+    = ( str ("open " ++ struct_ast ++ " open C_Grammar_Rule_Lib"{- FIXME: not yet generic -})
       . nl . nl
       . str "%%\n"
       . str "%pure\n"
@@ -66,7 +66,7 @@ produceParser (Grammar
       . interleave' "\n       | " (map (\i -> str (token_names' ! i ++ " of " ++ case nt_types ! i of Just s -> to_sml_ty s)) $ drop n_starts nonterms)
       . nl . nl
       . str "%term "
-      . interleave' "\n    | " (let l = map (\i -> let n = token_names' ! i in (n, ty_term n)) terms in
+      . interleave' "\n    | " (let l = map (\i -> let n = token_names' ! i in (n, ty_term' n)) terms in
                                 map (\(n, type_n) -> str (n ++ case type_n of Just s -> " of " ++ s ; Nothing -> ""))
                                     (case l of (x, _) : xs -> (x, Nothing) : init xs ++ [(fst (last xs), Nothing)]))
       . nl . nl
@@ -153,8 +153,10 @@ produceParser (Grammar
       . nl
       ) ""
   where
+    struct_ast = "C_Ast"{- FIXME: not yet generic -}
     ty_term0 = [("cchar", "cChar"), ("cint", "cInteger"), ("cfloat", "cFloat"), ("cstr", "cString"), ("ident", "ident"), ("tyident", "ident"), ("clangcversion", "ClangCVersion")]
     ty_term n = case lookup n ty_term0 of Nothing -> Just "string"; x -> x
+    ty_term' = let ty_term0' = map (\(s1, s2) -> (s1, struct_ast ++ "." ++ s2)) ty_term0 in \n -> case lookup n ty_term0' of Nothing -> Just "string"; x -> x
     mk_ty s = "ty_" ++ s
     n_starts = length starts'
     show_code f code =
