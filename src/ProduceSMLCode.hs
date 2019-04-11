@@ -55,11 +55,11 @@ produceParser (Grammar
               })
               action goto top_options module_header module_trailer
               target coerce ghc strict
-    = ( str "open C_ast_simple open Hsk_c_parser"{- FIXME: not yet generic -}
+    = ( str "open C_Ast open C_Grammar_Rule_Lib"{- FIXME: not yet generic -}
       . nl . nl
       . str "%%\n"
       . str "%pure\n"
-      . str ("%name " ++ "StrictC"{- FIXME: not yet generic -} ++ "\n")
+      . str ("%name " ++ "C_Grammar"{- FIXME: not yet generic -} ++ "\n")
       . str "%arg (_) : Header.arg\n"
       . str "%nodefault\n\n"
       . str "%nonterm "
