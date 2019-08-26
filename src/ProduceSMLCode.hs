@@ -57,18 +57,30 @@ produceParser (Grammar
               target coerce ghc strict
     = ( str ("open " ++ struct_ast ++ " open C_Grammar_Rule_Lib"{- FIXME: not yet generic -})
       . nl . nl
+      . str ("type " ++ start_happy_ml_ty ++ " = ")
+      . str start_happy_ml_ty_expand
+      . nl . nl
+      . interleave' "\n"
+           (let var_x = "x" in
+             snd $ foldl
+               (\((pat, nb), acc) _ ->
+                 (("Right (" ++ pat ++ ")", nb + 1), str ("fun " ++ start_happy_ml_val ++ show nb ++ " (" ++ var_x ++ " : " ++ start_happy_ml_ty ++ ") = case " ++ var_x ++ " of " ++ pat ++ " => SOME " ++ var_x ++ " | _ => NONE") : acc))
+               (("Left " ++ var_x, 1), [])
+               starts')
+      . nl . nl
       . str "%%\n"
       . str "%pure\n"
       . str ("%name " ++ "C_Grammar"{- FIXME: not yet generic -} ++ "\n")
       . str "%arg (_) : Header.arg\n"
       . str "%nodefault\n\n"
       . str "%nonterm "
-      . interleave' "\n       | " (map (\i -> str (token_names' ! i ++ " of " ++ case nt_types ! i of Just s -> to_sml_ty s)) $ drop n_starts nonterms)
+      . interleave' "\n       | " (str (start_happy_ml_rule ++ " of " ++ start_happy_ml_ty_expand) : (map (\i -> str (token_names' ! i ++ " of " ++ get_nt_types i)) $ drop n_starts nonterms))
       . nl . nl
       . str "%term "
-      . interleave' "\n    | " (let l = map (\i -> let n = token_names' ! i in (n, ty_term' n)) terms in
-                                map (\(n, type_n) -> str (n ++ case type_n of Just s -> " of " ++ s ; Nothing -> ""))
-                                    (case l of (x, _) : xs -> (x, Nothing) : init xs ++ [(fst (last xs), Nothing)]))
+      . interleave' "\n    | " ((map (\(n, _, _, _) -> str (mk_start n)) $ starts')
+                                ++ (let l = map (\i -> let n = token_names' ! i in (n, ty_term' n)) terms in
+                                    map (\(n, type_n) -> str (n ++ case type_n of Just s -> " of " ++ s ; Nothing -> ""))
+                                        (case l of (x, _) : xs -> (x, Nothing) : init xs ++ [(fst (last xs), Nothing)])))
       . nl . nl
       . str ("(* fun token_of_string error " ++ intercalate " " (map mk_ty $ U.sortUniq ("string" : map snd ty_term0)) ++ " a1 a2 = fn\n    ")
       . interleave' "\n    "
@@ -105,6 +117,14 @@ produceParser (Grammar
       . str "%%"
       . nl . nl
       . str "(* production *)\n"
+      . str (start_happy_ml_rule ++ " : ")
+      . interleave' "\n            | " (reverse $ snd $ foldl
+                                            (\ (acc_s, acc) (n, _, i, _) ->
+                                              let n' = token_names' ! i in
+                                              ("Right o " ++ acc_s, str (mk_start n ++ " " ++ n' ++ " ((" ++ acc_s ++ ") " ++ n' ++ "1)") : acc))
+                                              ("Left", [])
+                                              starts')
+      . nl . nl
       . interleave "\n\n"
           (map (\(x@(n, _, _, _):xs) ->
                  let f n' (_, l, (code, var), No) =
@@ -158,6 +178,13 @@ produceParser (Grammar
     ty_term n = case lookup n ty_term0 of Nothing -> Just "string"; x -> x
     ty_term' = let ty_term0' = map (\(s1, s2) -> (s1, struct_ast ++ "." ++ s2)) ty_term0 in \n -> case lookup n ty_term0' of Nothing -> Just "string"; x -> x
     mk_ty s = "ty_" ++ s
+    mk_start s = "start_" ++ s
+    start_happy_ml_ty = "start_happy"
+    start_happy_ml_val = "start_happy"
+    start_happy_ml_rule = "start_happy"
+    start_happy_ml_ty_expand =
+      foldl (\acc (_, _, i, _) -> ("(" ++ get_nt_types i ++ ", " ++ acc ++ ") either")) "unit" (reverse starts')
+    get_nt_types i = case nt_types ! i of Just s -> to_sml_ty s
     n_starts = length starts'
     show_code f code =
       let to_sml = fst . to_sml_exp f in
