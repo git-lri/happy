@@ -37,6 +37,7 @@ produceParser (Grammar
               { productions = prods
               , non_terminals = nonterms
               , terminals = terms
+              , priorities_full = prios
               , types = nt_types
               , first_nonterm = first_nonterm'
               , eof_term = eof_term
@@ -78,9 +79,12 @@ produceParser (Grammar
       . nl . nl
       . str "%term "
       . interleave' "\n    | " ((map (\(n, _, _, _) -> str (mk_start n)) $ starts')
+                                ++ concatMap (\(s, prio) -> case prio of ([], _) -> [str s]; _ -> []) prios
                                 ++ (let l = map (\i -> let n = token_names' ! i in (n, ty_term' n)) terms in
                                     map (\(n, type_n) -> str (n ++ case type_n of Just s -> " of " ++ s ; Nothing -> ""))
                                         (case l of (x, _) : xs -> (x, Nothing) : init xs ++ [(fst (last xs), Nothing)])))
+      . nl . nl
+      . interleave "\n" (map (\(s, (_, prio)) -> str $ case prio of No -> "" ; Prio None _ -> "%nonassoc " ++ s) prios)
       . nl . nl
       . str ("(* fun token_of_string error " ++ intercalate " " (map mk_ty $ U.sortUniq ("string" : map snd ty_term0)) ++ " a1 a2 = fn\n    ")
       . interleave' "\n    "
@@ -127,7 +131,7 @@ produceParser (Grammar
       . nl . nl
       . interleave "\n\n"
           (map (\(x@(n, _, _, _):xs) ->
-                 let f n' (_, l, (code, var), No) =
+                 let f n' (_, l, (code, var), prio) =
                        let l' = let (l'', _) = foldl (\(l', l_name) i ->
                                                        let name = token_names' ! i
                                                            name' = case Map.lookup name l_name of Nothing -> 1 ; Just x -> x + 1 in
@@ -137,6 +141,7 @@ produceParser (Grammar
                                 reverse l'' in
                        n'
                        ++ (intercalate " " $ map (\i -> token_names' ! i) l)
+                       ++ (case prio of (Nothing, _) -> "" ; (Just s, _) -> " %prec " ++ s)
                        ++ " ("
                        ++ show_code
                             (\e ->

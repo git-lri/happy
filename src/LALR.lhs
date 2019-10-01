@@ -496,7 +496,7 @@ Generate the action table
 >                     [ (startLookahead g partial, LR'Accept{-'-}) ]
 >                  | otherwise
 >                  -> case lookupProdNo g rule of
->                          (_,_,_,p) -> NameSet.toAscList la `zip` repeat (LR'Reduce rule p)
+>                          (_,_,_,(_,p)) -> NameSet.toAscList la `zip` repeat (LR'Reduce rule p)
 >               _ -> []
 
 >       possActions goto coll = do item <- closure1 g first coll

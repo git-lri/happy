@@ -34,7 +34,7 @@ Here is our mid-section datatype
 
 > type Name = Int
 
-> type Production = (Name,[Name],(String,[Int]),Priority)
+> type Production = (Name,[Name],(String,[Int]),(Maybe String,Priority))
 
 > data Grammar
 >       = Grammar {
@@ -51,6 +51,7 @@ Here is our mid-section datatype
 >               first_term        :: Name,
 >               eof_term          :: Name,
 >               priorities        :: [(Name,Priority)],
+>               priorities_full   :: [(String,([Name], Priority))],
 >               token_type        :: String,
 >               imported_identity :: Bool,
 >               monad             :: (Bool,String,String,String,String),
@@ -79,6 +80,7 @@ Here is our mid-section datatype
 >               , first_term            = ft
 >               , eof_term              = eof
 >               , priorities            = priorities
+>               , priorities_full       = priorities_full
 >               , token_type            = token_type
 >               , imported_identity     = imported_identity
 >               , monad                 = monad
@@ -100,6 +102,7 @@ Here is our mid-section datatype
 >        . showString "\nfirst_term = "    . shows ft
 >        . showString "\neof_term = "      . shows eof
 >        . showString "\npriorities = "    . shows priorities
+>        . showString "\npriorities_full = " . shows priorities_full
 >        . showString "\ntoken_type = "    . shows token_type
 >        . showString "\nimported_identity = " . shows imported_identity
 >        . showString "\nmonad = "         . shows monad
@@ -257,7 +260,7 @@ Start symbols...
 >   let
 >       parser_names   = [ s | TokenName s _ _ <- starts' ]
 >       start_partials = [ b | TokenName _ _ b <- starts' ]
->       start_prods = zipWith (\nm tok -> (nm, [tok], ("no code",[]), No))
+>       start_prods = zipWith (\nm tok -> (nm, [tok], ("no code",[]), (Nothing, No)))
 >                        start_names start_toks
 
 Deal with priorities...
@@ -270,9 +273,9 @@ Deal with priorities...
 >               , name <- lookupName nm
 >               ]
 
->       prioByString = [ (name, mkPrio i dir)
+>       prioByString = [ (nm, (lookupName nm, mkPrio i dir))
 >                      | (i,dir) <- priodir
->                      , name <- AbsSyn.getPrioNames dir
+>                      , nm <- AbsSyn.getPrioNames dir
 >                      ]
 
 Translate the rules from string to name-based.
@@ -293,8 +296,8 @@ Translate the rules from string to name-based.
 >           code' <- checkCode (length lhs) lhs' nonterm_names code attrs
 >           case mkPrec lhs' prec of
 >               Left s  -> do addErr ("Undeclared precedence token: " ++ s)
->                             return (nt, lhs', code', No)
->               Right p -> return (nt, lhs', code', p)
+>                             return (nt, lhs', code', (prec, No))
+>               Right p -> return (nt, lhs', code', (prec, p))
 >
 >       mkPrec :: [Name] -> Maybe String -> Either String Priority
 >       mkPrec lhs prio =
@@ -306,7 +309,7 @@ Translate the rules from string to name-based.
 >                                    Just p  -> Right p
 >               Just s -> case lookup s prioByString of
 >                           Nothing -> Left s
->                           Just p -> Right p
+>                           Just (_, p) -> Right p
 >   -- in
 
 >   rules1 <- mapM convNT rules
@@ -383,6 +386,7 @@ Get the token specs in terms of Names.
 >               first_term        = first_t,
 >               eof_term          = last terminal_names,
 >               priorities        = prios,
+>               priorities_full   = prioByString,
 >               imported_identity                 = getImportedIdentity dirs,
 >               monad             = getMonad dirs,
 >               lexer             = getLexer dirs,
