@@ -310,7 +310,7 @@ _Pat p = case p of
   S.PVar _ n -> _Name n
   S.PInfixApp _ p1 (S.Special _ (S.Cons _)) p2 -> _Pat p1 ++ " :: " ++ _Pat p2
   S.PApp _ pe pl -> _QName pe ++ concatMap (\x -> " " ++ _Pat x) pl
-  S.PTuple _ _ l -> "(" ++ (intercalate "," $ map _Pat l) ++ ")"
+  S.PTuple _ _ l -> "(" ++ (intercalate ", " $ map _Pat l) ++ ")"
   S.PList () [] -> "[]"
   S.PParen _ p -> "(" ++ _Pat p ++ ")"
   S.PWildCard _ -> "_"
@@ -324,6 +324,7 @@ _Literal l = case l of
 _QName q = case q of
   S.Qual _ (S.ModuleName _ s) n -> s ++ "." ++ _Name n
   S.UnQual _ n -> _Name n
+  S.Special _ (S.UnitCon _) -> "()"
   -- _ -> show q
 
 _Name n = case n of
