@@ -63,7 +63,7 @@ produceParser (Grammar
               })
               action goto top_options module_header module_trailer
               target coerce ghc strict
-    = ( str ("open " ++ struct_ast ++ " open C_Grammar_Rule_Lib"{- FIXME: not yet generic -})
+    = ( str ("open " ++ struct_ast ++ " open " ++ struct_rule_lib)
       . nl . nl
       . str ("type " ++ start_happy_ml_ty ++ " = ")
       . str start_happy_ml_ty_expand
@@ -186,13 +186,14 @@ produceParser (Grammar
       ) ""
   where
     struct_ast = "C_Ast"{- FIXME: not yet generic -}
+    struct_rule_lib = "C_Grammar_Rule_Lib"{- FIXME: not yet generic -}
     ty_term0 = [("cchar", "cChar"), ("cint", "cInteger"), ("cfloat", "cFloat"), ("cstr", "cString"), ("ident", "ident"), ("tyident", "ident"), ("clangcversion", "ClangCVersion")]
     ty_term n = case lookup n ty_term0 of Nothing -> Just "string"; x -> x
     ty_term' = let ty_term0' = map (\(s1, s2) -> (s1, struct_ast ++ "." ++ s2)) ty_term0 in \n -> case lookup n ty_term0' of Nothing -> Just (if rule_ocaml then case n of "NAME" -> "string" ; _ -> "unit" else "string"); x -> x
     ty_nterm =
       let apsnd s = map (\x -> (x, s)) in
-      apsnd "c_context" ["save_context", "scoped_parameter_type_list_x5f", "function_definition_x31", "parameter_type_list"]
-      ++ apsnd "c_declarator" ["declarator", "direct_declarator", "declarator_varname", "declarator_typedefname"]
+      apsnd (struct_rule_lib ++ "." ++ "c_context") ["save_context", "scoped_parameter_type_list_x5f", "function_definition_x31", "parameter_type_list"]
+      ++ apsnd (struct_rule_lib ++ "." ++ "c_declarator") ["declarator", "direct_declarator", "declarator_varname", "declarator_typedefname"]
       ++ apsnd "string" ["typedef_name", "var_name", "general_identifier", "enumeration_constant"]
     mk_ty s = "ty_" ++ s
     mk_start s = "start_" ++ s
