@@ -294,8 +294,8 @@ _Exp e = case e of
   S.InfixApp _ e1 (S.QVarOp _ q@(S.UnQual _ (S.Ident _ _))) e2 -> _Exp (S.App () (S.App () (S.Var () q) (S.Paren () e1)) (S.Paren () e2))
   S.InfixApp _ e1 (S.QConOp _ (S.Special _ (S.Cons _))) e2 -> _Exp e1 ++ " :: " ++ _Exp e2
   S.App _ e1 e2 -> _Exp e1 ++ " " ++ _Exp e2
-  S.Lambda _ p e | all (\x -> case x of S.PVar _ _ -> True ; S.PWildCard _ -> True ; _ -> False) p -> concatMap (\x -> "fn " ++ (case x of S.PVar _ n -> _Name n ; S.PWildCard _ -> "_") ++ " => ") p ++ _Exp e
-  S.Let _ (S.BDecls _ l) e -> "let " ++ (intercalate "; " $ map (\x -> case x of S.PatBind _ (S.PVar _ (S.Ident _ s)) (S.UnGuardedRhs _ e) Nothing -> "val " ++ s ++ " = " ++ _Exp e) l) ++ " in " ++ _Exp e ++ " end"
+  S.Lambda _ p e | all (\x -> case x of S.PVar _ _ -> True ; S.PTuple _ _ l -> all (\x -> case x of S.PVar _ _ -> True ; _ -> False) l ; S.PWildCard _ -> True ; _ -> False) p -> concatMap (\x -> "fn " ++ (case x of S.PVar _ n -> _Name n ; S.PTuple _ _ l -> "(" ++ (intercalate ", " $ map (\x -> case x of S.PVar _ n -> _Name n) l) ++ ")"; S.PWildCard _ -> "_") ++ " => ") p ++ _Exp e
+  S.Let _ (S.BDecls _ l) e -> "let " ++ (intercalate "; " $ map (\x -> case x of S.PatBind _ p (S.UnGuardedRhs _ e) Nothing -> "val " ++ _Pat p ++ " = " ++ _Exp e) l) ++ " in " ++ _Exp e ++ " end"
   S.Case _ e l ->
     "case " ++ _Exp e ++ " of "
     ++ (intercalate " | " $ map (\x -> case x of S.Alt _ pat (S.UnGuardedRhs _ e) Nothing -> _Pat pat ++ " => " ++ _Exp e) l)
