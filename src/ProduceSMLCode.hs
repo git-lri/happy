@@ -49,13 +49,13 @@ produceParser (Grammar
               , first_nonterm = first_nonterm'
               , eof_term = eof_term
               , first_term = fst_term
-              , token_names = token_names0
+              , token_names = token_names00
               , lexer = lexer'
               , imported_identity = imported_identity'
               , monad = (use_monad,monad_context,monad_tycon,monad_then,monad_return)
               , token_specs = token_rep
               , token_type = token_type'
-              , starts = starts'
+              , starts = starts0
               , error_handler = error_handler'
               , error_sig = error_sig'
               , attributetype = attributetype'
@@ -221,6 +221,11 @@ produceParser (Grammar
                  body3 = concat [conv l, conv_inter l body2, reverse body2, conv_inter body2 r, conv (reverse r)] in
              escape_sml body3)
            token_names0
+    lookup_nterm_rewrite =
+      let nterm_rewrite = [("translation_unit_file", "translation_unit")] in
+      \n -> case lookup n nterm_rewrite of Just n' -> n' ; Nothing -> n
+    token_names0 = if rule_ocaml then fmap lookup_nterm_rewrite token_names00 else token_names00
+    starts' = if rule_ocaml then map (\(n, i1, i2, b) -> (lookup_nterm_rewrite n, i1, i2, b)) starts0 else starts0
     escape_sml body3 =
              if body3 `elem` ["case", "do", "else", "for", "if", "struct", "while", "return"] then
                body3 ++ "0"
