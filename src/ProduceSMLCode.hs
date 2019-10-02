@@ -7,6 +7,7 @@ import GenUtils               ( mapDollarDollar, str, char, nl, strspace,
                                 brack, brack' )
 import qualified ProduceCode as PC
 
+import Control.Monad (void)
 import Data.Array.ST          ( STUArray )
 import Data.Array.Unboxed     ( UArray )
 import Data.Array.MArray
@@ -17,10 +18,16 @@ import qualified Data.Generics as G
 import Data.List              ( groupBy, intercalate, partition )
 import qualified Data.List.Unique as U
 import qualified Data.Map.Strict as Map
+import Data.Maybe (catMaybes)
 
 import qualified Language.Haskell.Exts.Parser as P
 import qualified Language.Haskell.Exts.Syntax as S
 import qualified Numeric
+
+import Text.Parsec.String (Parser)
+import Text.Parsec as O
+
+rule_ocaml = False
 
 produceParser :: Grammar                      -- grammar info
               -> ActionTable                  -- action table
@@ -75,7 +82,7 @@ produceParser (Grammar
       . str "%arg (_) : Header.arg\n"
       . str "%nodefault\n\n"
       . str "%nonterm "
-      . interleave' "\n       | " (str (start_happy_ml_rule ++ " of " ++ start_happy_ml_ty_expand) : (map (\i -> str (token_names' ! i ++ " of " ++ get_nt_types i)) $ drop n_starts nonterms))
+      . interleave' "\n       | " (str (start_happy_ml_rule ++ " of " ++ start_happy_ml_ty_expand) : (map (\i -> str (let name = token_names' ! i in name ++ " of " ++ if rule_ocaml then case lookup name ty_nterm of Just s -> s ; Nothing -> "unit" else get_nt_types i)) $ drop n_starts nonterms))
       . nl . nl
       . str "%term "
       . interleave' "\n    | " ((map (\(n, _, _, _) -> str (mk_start n)) $ starts')
@@ -115,7 +122,7 @@ produceParser (Grammar
            & map str)
       . str "\n*)"
       . nl . nl
-      . str ("%eop " ++ token_names' ! eof_term)
+      . str ("%eop " ++ token_names' ! eof_term ++ if rule_ocaml then " EOF"{- FIXME: not yet generic -} else "")
       . nl
       . str ("%pos " ++ "Position.T" ++ "\n")
       . str "%%"
@@ -181,7 +188,12 @@ produceParser (Grammar
     struct_ast = "C_Ast"{- FIXME: not yet generic -}
     ty_term0 = [("cchar", "cChar"), ("cint", "cInteger"), ("cfloat", "cFloat"), ("cstr", "cString"), ("ident", "ident"), ("tyident", "ident"), ("clangcversion", "ClangCVersion")]
     ty_term n = case lookup n ty_term0 of Nothing -> Just "string"; x -> x
-    ty_term' = let ty_term0' = map (\(s1, s2) -> (s1, struct_ast ++ "." ++ s2)) ty_term0 in \n -> case lookup n ty_term0' of Nothing -> Just "string"; x -> x
+    ty_term' = let ty_term0' = map (\(s1, s2) -> (s1, struct_ast ++ "." ++ s2)) ty_term0 in \n -> case lookup n ty_term0' of Nothing -> Just (if rule_ocaml then case n of "NAME" -> "string" ; _ -> "unit" else "string"); x -> x
+    ty_nterm =
+      let apsnd s = map (\x -> (x, s)) in
+      apsnd "c_context" ["save_context", "scoped_parameter_type_list_x5f", "function_definition_x31", "parameter_type_list"]
+      ++ apsnd "c_declarator" ["declarator", "direct_declarator", "declarator_varname", "declarator_typedefname"]
+      ++ apsnd "string" ["typedef_name", "var_name", "general_identifier", "enumeration_constant"]
     mk_ty s = "ty_" ++ s
     mk_start s = "start_" ++ s
     start_happy_ml_ty = "start_happy"
@@ -189,7 +201,7 @@ produceParser (Grammar
     start_happy_ml_rule = "start_happy"
     start_happy_ml_ty_expand =
       foldl (\acc (_, _, i, _) -> ("(" ++ get_nt_types i ++ ", " ++ acc ++ ") either")) "unit" (reverse starts')
-    get_nt_types i = case nt_types ! i of Just s -> to_sml_ty s
+    get_nt_types i = case nt_types ! i of Just s -> to_sml_ty s; Nothing -> "unit"
     n_starts = length starts'
     show_code f code =
       let to_sml = fst . to_sml_exp f in
@@ -328,14 +340,198 @@ _QName q = case q of
   -- _ -> show q
 
 _Name n = case n of
+  S.Ident _ s@('_' : _) -> "v" ++ s -- avoiding ML syntax confusion with specific variable "_1", "_2", etc.
   S.Ident _ s -> s
   -- _ -> show n
 
 to_sml_ty s = case P.parseType s of P.ParseOk t -> _Type t
-to_sml_exp f s = case P.parseExp s of
-  P.ParseOk t ->
-    let e = fmap (\_ -> ()) t in
-    ( _Exp (f e)
-    , case e of
-        S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "L"))) (S.Con _ (S.UnQual _ (S.Ident _ _)))) (S.Paren _ (S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "posOf"))) (S.Var _ (S.UnQual _ (S.Ident _ _))))) -> True
-        _ -> False)
+to_sml_exp f s =
+  let unparse f is_monadic t =
+        let e = fmap (\_ -> ()) t in
+        ( _Exp (f e)
+        , is_monadic e) in
+  case P.parseExp s of
+    P.ParseOk t ->
+      if rule_ocaml then
+        if ocaml_eval_unit Map.empty t then
+          let e = fmap (\_ -> ()) (S.Con () (S.Special () (S.UnitCon ()))) in
+          ( _Exp (f e)
+          , False)
+        else
+          unparse (\e ->
+                   f $
+                   case e of
+                     S.Let _ _ (S.Paren _ (S.Var _ (S.UnQual _ (S.Ident _ _)))) ->
+                       S.App () (S.Var () (S.UnQual () (S.Ident () "return"))) e
+                     _ -> e)
+                  (\_ -> True)
+                  t
+      else
+        unparse f
+                (\e ->
+                 case e of
+                   S.App _ (S.App _ (S.Con _ (S.UnQual _ (S.Ident _ "L"))) (S.Con _ (S.UnQual _ (S.Ident _ _)))) (S.Paren _ (S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "posOf"))) (S.Var _ (S.UnQual _ (S.Ident _ _))))) -> True
+                   S.Paren _ (S.App _ (S.Var _ (S.UnQual _ (S.Ident _ "save_context"))) (S.Con _ (S.Special _ (S.UnitCon _)))) -> True
+                   _ -> False) t
+    _ -> case ocaml_parse s of
+           Right [t] -> case P.parseExp (_OExp t) of
+                          P.ParseOk t -> unparse f (\_ -> True) t
+                          _ -> ("(*(*Syntax error*)" ++ s ++ "*)", True)
+
+ocaml_eval_unit tab e =
+ case e of
+  S.Var _ (S.UnQual _ (S.Ident _ name)) -> case Map.lookup name tab of Nothing -> False ; Just _ -> True
+  S.Paren _ e -> ocaml_eval_unit tab e
+  S.Con _ (S.Special _ (S.UnitCon _)) -> True
+  S.Let _ (S.BDecls _ bd) e ->
+    ocaml_eval_unit
+      (foldl (\tab0 pat ->
+               let eval_fold =
+                     foldl (\tab0 pat ->
+                             case pat of
+                               (S.PVar _ (S.Ident _ p), e) -> 
+                                 if ocaml_eval_unit tab e then
+                                   Map.insert p () tab0
+                                 else
+                                   tab0
+                               _ -> tab0)
+                           tab0 in
+               case pat of
+                 S.PatBind _ (S.PTuple _ _ ps) (S.UnGuardedRhs _ (S.Tuple _ _ es)) _ -> eval_fold (zip ps es)
+                 S.PatBind _ p (S.UnGuardedRhs _ e) _ -> eval_fold [(p, e)])
+             tab
+             bd)
+      e
+  _ -> False
+
+--------------------------------------------------------------------------------
+
+data OPat = OPatId String
+          | OPatTup [OPat]
+  deriving Show
+
+data OExp = OExpId String
+          | OExpSeq OExp OExp
+          | OExpTup [OExp]
+          | OExpLet OPat OExp OExp
+          | OExpApp OExp OExp
+  deriving Show
+
+_OPatM p = case p of
+  OPatId s -> s
+  OPatTup l -> "(" ++ (intercalate ", " $ map _OPatM l) ++ ")"
+
+_OExpM e = case e of
+  OExpId s -> s
+  OExpSeq e1 e2 -> "do {" ++ _OExpM e1 ++ "; return " ++ _OExpM e2 ++ "}"
+  OExpTup l -> "(" ++ (intercalate ", " $ map _OExpM l) ++ ")"
+  OExpLet (OPatTup ps) (OExpTup es) e ->
+    "do {" ++ concatMap (\(p, e) -> _OPatM p ++ " <- " ++ _OExpM e ++ "; ") (zip ps es) ++ _OExpM e ++ "}"
+  OExpLet p e1 e2 -> "bind (" ++ _OExpM e1 ++ ") (\\ " ++ _OPatM p ++ " -> " ++ _OExpM e2 ++ ")"
+  OExpApp e1 e2 -> _OExpM e1 ++ " " ++ _OExpM e2
+
+_OPat p = case p of
+  OPatId s -> s
+  OPatTup l -> "(" ++ (intercalate ", " $ map _OPat l) ++ ")"
+
+_OExp e = case e of
+  OExpId s -> s
+  OExpSeq e1 e2 -> "do {" ++ _OExp e1 ++ "; return " ++ _OExp e2 ++ "}"
+  OExpTup l -> "(" ++ (intercalate ", " $ map _OExp l) ++ ")"
+  OExpLet p e1 e2 -> "let " ++ _OPat p ++ " = " ++ _OExp e1 ++ " in " ++
+                     (case e2 of
+                        OExpTup
+                          [OExpLet (OPatId "ctx")
+                                   (OExpApp (OExpId "save_context") (OExpTup []))
+                                   (OExpSeq (OExpApp (OExpId "reinstall_function_context") _) (OExpId "ctx"))] ->
+                            _OExpM e2
+                        _ -> _OExp e2)
+  OExpApp e1 e2 -> _OExp e1 ++ " " ++ _OExp e2
+
+ocaml_w = O.oneOf " \t\n"
+
+ocaml_white :: Parser ()
+ocaml_white = void $ O.many $ ocaml_w
+
+ocaml_white1 :: Parser ()
+ocaml_white1 = void $ O.many1 $ ocaml_w
+
+ocaml_id = do {O.try (O.string "let" O.<|> O.string "in"); O.unexpected "keyword"}
+         O.<|> O.many1 (O.alphaNum O.<|> O.char '_')
+
+ocaml_pat_id = do
+  i <- ocaml_id
+  return $ OPatId i
+
+ocaml_tup0 f = do
+  O.string "("
+  ocaml_white
+  O.string ")"
+  return $ f []
+
+ocaml_tup_rec scan f = do
+  O.string "("
+  ocaml_white
+  p <- scan
+  ocaml_white
+  ps <- O.manyTill (do {O.char ','; ocaml_white; scan}) (O.string ")")
+  return $ f (p : ps)
+
+ocaml_tup scan f =  O.try (ocaml_tup0 f)
+              O.<|> ocaml_tup_rec scan f
+
+ocaml_pat =  ocaml_tup ocaml_pat OPatTup
+       O.<|> ocaml_pat_id
+
+ocaml_exp_id = do
+  i <- ocaml_id
+  return $ OExpId i
+
+ocaml_exp_let = do
+  O.string "let"
+  ocaml_white
+  pat <- ocaml_pat
+  ocaml_white
+  O.char '='
+  ocaml_white
+  e1 <- ocaml_exp
+  ocaml_white
+  O.string "in"
+  ocaml_white
+  e2 <- ocaml_exp
+  return $ OExpLet pat e1 e2
+
+ocaml_exp_seq = do
+  e1 <- ocaml_exp_app
+  ocaml_white
+  O.string ";"
+  ocaml_white
+  e2 <- ocaml_exp
+  return $ OExpSeq e1 e2  
+
+ocaml_exp_app = do
+  e1 <- ocaml_exp_id
+  ocaml_white1
+  e2 <- ocaml_exp
+  return $ OExpApp e1 e2  
+
+ocaml_paren f g = do
+  O.string "("
+  ocaml_white
+  e <- f
+  ocaml_white
+  O.string ")"
+  return $ g e
+
+ocaml_exp = O.choice
+  [ ocaml_exp_let
+  , ocaml_tup ocaml_exp OExpTup
+  , O.try ocaml_exp_seq O.<|> O.try ocaml_exp_app O.<|> ocaml_exp_id ]
+
+ocaml_parse =
+  O.parse (do
+             res <- O.manyTill (do {ocaml_white1 ; return Nothing}
+                                O.<|>
+                                (ocaml_exp >>= return . Just))
+                               O.eof
+             return $ catMaybes res) ""

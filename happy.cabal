@@ -152,7 +152,8 @@ executable happy
                      -- mtl-2.2.1 added Control.Monad.Except
                  haskell-src-exts == 1.20.1,
                  syb,
-                 Unique
+                 Unique,
+                 parsec
 
   extensions: CPP, MagicHash, FlexibleContexts
   ghc-options: -Wall
